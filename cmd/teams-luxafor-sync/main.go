@@ -33,7 +33,12 @@ var busyStatuses = map[string]struct{}{
 	"inameeting":        {},
 	"presenting":        {},
 	"focusing":          {},
-	"berightback":       {},
+}
+
+var awayStatuses = map[string]struct{}{
+	"berightback": {},
+	"away":        {},
+	"appearaway":  {},
 }
 
 var availabilityRe = regexp.MustCompile(`(?i)availability["']?\s*[:=]\s*["']?([A-Za-z]+)`)
@@ -327,9 +332,14 @@ func (a *app) findMostRecentAvailability() string {
 }
 
 func mapToColor(status string) string {
-	_, busy := busyStatuses[strings.ToLower(strings.TrimSpace(status))]
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	_, busy := busyStatuses[normalized]
 	if busy {
 		return "red"
+	}
+	_, away := awayStatuses[normalized]
+	if away {
+		return "yellow"
 	}
 	return "green"
 }
@@ -384,6 +394,8 @@ func colorRGB(name string) (byte, byte, byte, error) {
 		return 255, 0, 0, nil
 	case "green":
 		return 0, 255, 0, nil
+	case "yellow":
+		return 255, 255, 0, nil
 	default:
 		return 0, 0, 0, fmt.Errorf("unsupported color: %s", name)
 	}

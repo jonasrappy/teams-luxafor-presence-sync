@@ -31,6 +31,12 @@ func TestMapToColor(t *testing.T) {
 	if got := mapToColor("DoNotDisturb"); got != "red" {
 		t.Fatalf("expected red for DoNotDisturb, got %q", got)
 	}
+	if got := mapToColor("BeRightBack"); got != "yellow" {
+		t.Fatalf("expected yellow for BeRightBack, got %q", got)
+	}
+	if got := mapToColor("Away"); got != "yellow" {
+		t.Fatalf("expected yellow for Away, got %q", got)
+	}
 	if got := mapToColor("Available"); got != "green" {
 		t.Fatalf("expected green for Available, got %q", got)
 	}

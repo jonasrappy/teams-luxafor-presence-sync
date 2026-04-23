@@ -3,6 +3,7 @@
 Syncs Luxafor color with Microsoft Teams presence on macOS.
 
 - Busy-like statuses -> red
+- Away-like statuses (`BeRightBack`, `Away`) -> yellow
 - All other statuses -> green
 
 ## Requirements
