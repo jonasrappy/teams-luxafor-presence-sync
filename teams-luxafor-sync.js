@@ -25,6 +25,7 @@ let lastState = null;
 let lastColor = null;
 let lastLogFile = null;
 let cachedLogDir = null;
+let lastNoLogMessageAt = 0;
 
 function now() {
   return new Date().toISOString();
@@ -178,7 +179,11 @@ function tick() {
     const logDir = resolveLogDir();
     const logFile = getLatestTeamsLogFile();
     if (!logDir || !logFile) {
-      console.error(`[${now()}] No Teams logs found. Set TEAMS_LOG_DIR if needed.`);
+      const nowMs = Date.now();
+      if (nowMs - lastNoLogMessageAt > 60_000) {
+        console.error(`[${now()}] No Teams logs found. Set TEAMS_LOG_DIR if needed.`);
+        lastNoLogMessageAt = nowMs;
+      }
       return;
     }
 

@@ -21,7 +21,7 @@ Busy-like statuses currently include:
 
 ```bash
 git clone <YOUR_REPO_URL>
-cd teams-luxafor-sync
+cd teams-luxafor-presence-sync
 chmod +x install.sh uninstall.sh
 ./install.sh
 ```

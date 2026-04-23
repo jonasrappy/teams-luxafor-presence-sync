@@ -30,10 +30,14 @@ fi
 mkdir -p "$LAUNCH_AGENTS_DIR"
 mkdir -p "$HOME/Library/Logs"
 
-ESC_NODE_BIN=${NODE_BIN//\//\\/}
-ESC_SCRIPT_PATH=${SCRIPT_PATH//\//\\/}
-ESC_LOG_OUT=${LOG_OUT//\//\\/}
-ESC_LOG_ERR=${LOG_ERR//\//\\/}
+escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
+ESC_NODE_BIN="$(escape_sed_replacement "$NODE_BIN")"
+ESC_SCRIPT_PATH="$(escape_sed_replacement "$SCRIPT_PATH")"
+ESC_LOG_OUT="$(escape_sed_replacement "$LOG_OUT")"
+ESC_LOG_ERR="$(escape_sed_replacement "$LOG_ERR")"
 
 sed \
   -e "s/__NODE_BIN__/$ESC_NODE_BIN/g" \
@@ -44,13 +48,22 @@ sed \
 
 # Install dependencies locally
 cd "$SCRIPT_DIR"
-npm install
+if [[ -f package-lock.json ]]; then
+  npm ci --omit=dev
+else
+  npm install --omit=dev
+fi
 
 # Restart agent cleanly
 launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST_TARGET"
-launchctl enable "gui/$(id -u)/$LABEL"
-launchctl kickstart -k "gui/$(id -u)/$LABEL"
+if launchctl bootstrap "gui/$(id -u)" "$PLIST_TARGET" >/dev/null 2>&1; then
+  launchctl enable "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+  launchctl kickstart -k "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+else
+  # Fallback for shells/environments where bootstrap returns I/O errors.
+  launchctl unload "$PLIST_TARGET" >/dev/null 2>&1 || true
+  launchctl load "$PLIST_TARGET"
+fi
 
 echo "Installed and started: $LABEL"
 echo "Plist: $PLIST_TARGET"
