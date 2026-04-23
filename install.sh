@@ -153,16 +153,31 @@ else
 fi
 
 # Restart agent cleanly
+started=0
 launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
 if launchctl bootstrap "gui/$(id -u)" "$PLIST_TARGET" >/dev/null 2>&1; then
   launchctl enable "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
   launchctl kickstart -k "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+  started=1
 else
   # Fallback for shells/environments where bootstrap returns I/O errors.
   launchctl unload "$PLIST_TARGET" >/dev/null 2>&1 || true
-  launchctl load "$PLIST_TARGET"
+  if launchctl load "$PLIST_TARGET" >/dev/null 2>&1; then
+    started=1
+  fi
 fi
 
-echo "Installed and started: $LABEL"
+if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+  started=1
+fi
+
+if [[ $started -eq 1 ]]; then
+  echo "Installed and started: $LABEL"
+else
+  echo "Installed, but LaunchAgent could not be started from this shell."
+  echo "Run this from your logged-in macOS terminal session:"
+  echo "  launchctl bootstrap gui/$(id -u) \"$PLIST_TARGET\""
+  echo "  launchctl kickstart -k gui/$(id -u)/$LABEL"
+fi
 echo "Plist: $PLIST_TARGET"
 echo "Logs:  $LOG_OUT"
