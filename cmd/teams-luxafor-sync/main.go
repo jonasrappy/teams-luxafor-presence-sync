@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -35,9 +36,10 @@ var busyStatuses = map[string]struct{}{
 	"berightback":       {},
 }
 
-var availabilityRe = regexp.MustCompile(`availability:\s*([A-Za-z]+)`)
+var availabilityRe = regexp.MustCompile(`(?i)availability["']?\s*[:=]\s*["']?([A-Za-z]+)`)
 var hidInitOnce sync.Once
 var hidInitErr error
+var errEnumerationDone = errors.New("enumeration done")
 
 type app struct {
 	pollInterval         time.Duration
@@ -261,22 +263,49 @@ func (a *app) getLatestTeamsLogFile() string {
 }
 
 func (a *app) extractAvailabilityFromFile(filePath string) (string, error) {
-	data, err := os.ReadFile(filePath)
+	file, err := os.Open(filePath)
 	if err != nil {
 		return "", err
 	}
-	if int64(len(data)) > a.tailBytes {
-		data = data[len(data)-int(a.tailBytes):]
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return "", err
 	}
+
+	size := info.Size()
+	if size <= 0 {
+		return "", nil
+	}
+	tail := a.tailBytes
+	if tail <= 0 {
+		tail = size
+	}
+	start := int64(0)
+	if size > tail {
+		start = size - tail
+	}
+
+	length := size - start
+	data := make([]byte, int(length))
+	if _, err := file.ReadAt(data, start); err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+
+	return extractAvailabilityFromBytes(data), nil
+}
+
+func extractAvailabilityFromBytes(data []byte) string {
 	matches := availabilityRe.FindAllSubmatch(data, -1)
 	if len(matches) == 0 {
-		return "", nil
+		return ""
 	}
 	last := matches[len(matches)-1]
 	if len(last) < 2 {
-		return "", nil
+		return ""
 	}
-	return string(last[1]), nil
+	return string(last[1])
 }
 
 func (a *app) findMostRecentAvailability() string {
@@ -338,9 +367,9 @@ func setLuxaforColor(color string) error {
 		}
 
 		writeErr = nil
-		return errors.New("done")
+		return errEnumerationDone
 	})
-	if err != nil && err.Error() != "done" {
+	if err != nil && !errors.Is(err, errEnumerationDone) {
 		return err
 	}
 	if !found {
