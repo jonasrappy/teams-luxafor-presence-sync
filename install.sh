@@ -27,6 +27,104 @@ if [[ ! -f "$TEMPLATE_PATH" ]]; then
   exit 1
 fi
 
+check_teams_log_access() {
+  "$NODE_BIN" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+
+const home = process.env.HOME;
+const groupContainersRoot = path.join(home, 'Library/Group Containers');
+const candidates = [
+  path.join(
+    home,
+    'Library/Group Containers/UBF8T346G9.com.microsoft.teams/Library/Application Support/Logs'
+  ),
+  path.join(home, 'Library/Application Support/Microsoft/Teams/logs'),
+];
+
+let permissionDenied = false;
+let readable = false;
+
+function denied(err) {
+  return err && (err.code === 'EACCES' || err.code === 'EPERM');
+}
+
+try {
+  const groupDirs = fs.readdirSync(groupContainersRoot);
+  for (const entry of groupDirs) {
+    if (!entry.toLowerCase().includes('microsoft.teams')) continue;
+    candidates.push(path.join(groupContainersRoot, entry, 'Library/Application Support/Logs'));
+  }
+} catch (err) {
+  if (denied(err)) permissionDenied = true;
+}
+
+for (const dirPath of [...new Set(candidates)]) {
+  try {
+    const names = fs.readdirSync(dirPath);
+    const logs = names.filter((name) => name.startsWith('MSTeams_') && name.endsWith('.log'));
+    for (const name of logs.slice(0, 3)) {
+      const filePath = path.join(dirPath, name);
+      try {
+        const fd = fs.openSync(filePath, 'r');
+        fs.closeSync(fd);
+        readable = true;
+        break;
+      } catch (err) {
+        if (denied(err)) permissionDenied = true;
+      }
+    }
+    if (readable) break;
+  } catch (err) {
+    if (denied(err)) permissionDenied = true;
+  }
+}
+
+if (readable) process.exit(0);
+if (permissionDenied) process.exit(10);
+process.exit(11);
+NODE
+}
+
+preflight_permissions() {
+  set +e
+  check_teams_log_access
+  local rc=$?
+  set -e
+
+  if [[ $rc -eq 0 ]]; then
+    return 0
+  fi
+
+  if [[ $rc -eq 11 ]]; then
+    echo "Warning: Teams log files were not found yet. Start Teams and sign in before expecting sync."
+    return 0
+  fi
+
+  echo
+  echo "Permission needed: macOS is blocking Node from reading Teams logs."
+  echo "Grant Full Disk Access to:"
+  echo "  $NODE_BIN"
+  echo
+  echo "Opening Privacy settings now..."
+  open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" >/dev/null 2>&1 || true
+  echo
+  read -r -p "After enabling access, press Enter to re-check..."
+
+  set +e
+  check_teams_log_access
+  rc=$?
+  set -e
+
+  if [[ $rc -ne 0 && $rc -ne 11 ]]; then
+    echo "Error: still no permission to read Teams logs for Node."
+    echo "Please enable Full Disk Access for the Node binary above, then run ./install.sh again."
+    exit 1
+  fi
+}
+
+preflight_permissions
+
 mkdir -p "$LAUNCH_AGENTS_DIR"
 mkdir -p "$HOME/Library/Logs"
 

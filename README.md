@@ -30,6 +30,10 @@ What `install.sh` does:
 - Installs npm dependencies
 - Generates a user-specific LaunchAgent plist from template
 - Registers + starts `com.teams-luxafor-sync` at login
+- Runs a first-run permissions preflight and opens Privacy settings if Node lacks log access
+
+On first install, macOS may require **Full Disk Access** for your `node` binary to read Teams logs.
+If prompted by `install.sh`, grant access and press Enter to continue.
 
 ## Verify It Is Running
 
