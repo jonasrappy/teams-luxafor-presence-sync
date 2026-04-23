@@ -9,8 +9,8 @@ Syncs Luxafor color with Microsoft Teams presence on macOS.
 
 ```bash
 brew tap jonasrappy/tap
-brew install teams-luxafor-sync
-brew services start teams-luxafor-sync
+brew install jonasrappy/tap/teams-luxafor-sync
+brew services start jonasrappy/tap/teams-luxafor-sync
 ```
 
 ## Check status
@@ -41,6 +41,8 @@ If sync does not react, grant Full Disk Access to the installed binary path:
 ```bash
 $(brew --prefix)/bin/teams-luxafor-sync
 ```
+
+Homebrew may require up-to-date Xcode Command Line Tools on some systems.
 
 ## Optional env vars
 
