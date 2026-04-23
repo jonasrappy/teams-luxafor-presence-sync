@@ -8,6 +8,7 @@ const HOME = process.env.HOME;
 const POLL_MS = Number(process.env.POLL_MS || 3000);
 const TAIL_BYTES = Number(process.env.TAIL_BYTES || 256 * 1024);
 const FALLBACK_LOG_SCAN_COUNT = Number(process.env.FALLBACK_LOG_SCAN_COUNT || 5);
+const REAPPLY_MS = Number(process.env.REAPPLY_MS || 15000);
 
 const BUSY_STATUSES = new Set([
   'busy',
@@ -26,6 +27,7 @@ let lastColor = null;
 let lastLogFile = null;
 let cachedLogDir = null;
 let lastNoLogMessageAt = 0;
+let lastApplyAt = 0;
 
 function now() {
   return new Date().toISOString();
@@ -203,12 +205,15 @@ function tick() {
     }
 
     const color = mapToColor(availability);
+    const nowMs = Date.now();
+    const needsPeriodicReapply = nowMs - lastApplyAt >= REAPPLY_MS;
 
-    if (availability !== lastState || color !== lastColor) {
+    if (availability !== lastState || color !== lastColor || needsPeriodicReapply) {
       const changed = setLuxaforColor(color);
       if (changed) {
         lastState = availability;
         lastColor = color;
+        lastApplyAt = nowMs;
         console.log(`[${now()}] Teams=${availability} -> Luxafor=${color}`);
       }
     }
