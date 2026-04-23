@@ -1,0 +1,21 @@
+{
+  "name": "teams-luxafor-sync",
+  "version": "1.0.0",
+  "description": "Sync Luxafor LED color with Microsoft Teams availability on macOS",
+  "main": "teams-luxafor-sync.js",
+  "scripts": {
+    "start": "node teams-luxafor-sync.js"
+  },
+  "keywords": [
+    "teams",
+    "luxafor",
+    "macos",
+    "launchagent",
+    "presence"
+  ],
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "luxafor-api": "^4.0.0"
+  }
+}
