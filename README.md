@@ -60,6 +60,7 @@ Set environment variables in the generated plist (`~/Library/LaunchAgents/com.te
 - `TAIL_BYTES` (default `262144`)
 - `FALLBACK_LOG_SCAN_COUNT` (default `5`)
 - `TEAMS_LOG_DIR` (manual override if Teams logs are in a non-standard path)
+- `REAPPLY_MS` (default `15000`, force-sync interval if lamp was manually changed)
 
 After changes:
 
