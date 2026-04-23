@@ -11,9 +11,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/karalabe/hid"
+	hid "github.com/sstallion/go-hid"
 )
 
 const (
@@ -35,6 +36,8 @@ var busyStatuses = map[string]struct{}{
 }
 
 var availabilityRe = regexp.MustCompile(`availability:\s*([A-Za-z]+)`)
+var hidInitOnce sync.Once
+var hidInitErr error
 
 type app struct {
 	pollInterval         time.Duration
@@ -308,22 +311,42 @@ func setLuxaforColor(color string) error {
 		return err
 	}
 
-	devices := hid.Enumerate(vendorID, productID)
-	if len(devices) == 0 {
-		return errors.New("no Luxafor device found")
-	}
-
-	dev, err := devices[0].Open()
-	if err != nil {
-		return fmt.Errorf("cannot open device with vendor id 0x4d8 and product id 0xf372")
-	}
-	defer dev.Close()
-
 	report := []byte{1, 255, r, g, b, 0, 0, 0}
-	if _, err := dev.Write(report); err != nil {
+
+	hidInitOnce.Do(func() {
+		hidInitErr = hid.Init()
+	})
+	if hidInitErr != nil {
+		return hidInitErr
+	}
+
+	found := false
+	writeErr := errors.New("no Luxafor device found")
+
+	err = hid.Enumerate(vendorID, productID, func(info *hid.DeviceInfo) error {
+		found = true
+		dev, openErr := hid.OpenPath(info.Path)
+		if openErr != nil {
+			writeErr = fmt.Errorf("cannot open device with vendor id 0x4d8 and product id 0xf372: %v", openErr)
+			return nil
+		}
+		defer dev.Close()
+
+		if _, openErr = dev.Write(report); openErr != nil {
+			writeErr = openErr
+			return nil
+		}
+
+		writeErr = nil
+		return errors.New("done")
+	})
+	if err != nil && err.Error() != "done" {
 		return err
 	}
-	return nil
+	if !found {
+		return errors.New("no Luxafor device found")
+	}
+	return writeErr
 }
 
 func colorRGB(name string) (byte, byte, byte, error) {
