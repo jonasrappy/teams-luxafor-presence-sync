@@ -5,18 +5,27 @@ Syncs Luxafor color with Microsoft Teams presence on macOS.
 - Busy-like statuses -> red
 - All other statuses -> green
 
-## Install with Homebrew
+## Requirements
+
+- macOS (Apple Silicon or Intel)
+- Microsoft Teams desktop app with presence enabled
+- A connected Luxafor device
+
+## Install (Homebrew)
 
 ```bash
+brew update
 brew tap jonasrappy/tap
 brew install jonasrappy/tap/teams-luxafor-sync
 brew services start jonasrappy/tap/teams-luxafor-sync
 ```
 
-## Check status
+`brew services start` enables autostart at user login.
+
+## Verify service
 
 ```bash
-brew services list | rg teams-luxafor-sync
+brew services list | grep -E '^teams-luxafor-sync\s'
 ```
 
 Logs:
@@ -24,6 +33,14 @@ Logs:
 ```bash
 tail -f "$(brew --prefix)/var/log/teams-luxafor-sync.log"
 tail -f "$(brew --prefix)/var/log/teams-luxafor-sync-error.log"
+```
+
+## Update
+
+```bash
+brew update
+brew upgrade jonasrappy/tap/teams-luxafor-sync
+brew services restart teams-luxafor-sync
 ```
 
 ## Stop / Uninstall
@@ -35,14 +52,30 @@ brew uninstall teams-luxafor-sync
 
 ## First-run permissions (macOS)
 
-The process may need macOS privacy access to read Teams logs.
-If sync does not react, grant Full Disk Access to the installed binary path:
+The service may need privacy access to read Teams logs under `~/Library/Group Containers`.
+If color sync does not react:
 
 ```bash
-$(brew --prefix)/bin/teams-luxafor-sync
+open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
 ```
 
-Homebrew may require up-to-date Xcode Command Line Tools on some systems.
+Then grant **Full Disk Access** to:
+
+```bash
+$(which teams-luxafor-sync)
+```
+
+and restart:
+
+```bash
+brew services restart teams-luxafor-sync
+```
+
+Quick one-shot diagnostics:
+
+```bash
+teams-luxafor-sync -once
+```
 
 ## Optional env vars
 
