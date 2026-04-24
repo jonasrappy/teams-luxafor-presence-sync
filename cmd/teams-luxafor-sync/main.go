@@ -77,7 +77,7 @@ func main() {
 	}
 
 	a := &app{
-		pollInterval:         durationFromEnv("POLL_MS", 3000*time.Millisecond),
+		pollInterval:         durationFromEnv("POLL_MS", 300*time.Millisecond),
 		tailBytes:            int64(intFromEnv("TAIL_BYTES", 256*1024)),
 		fallbackLogScanCount: intFromEnv("FALLBACK_LOG_SCAN_COUNT", 5),
 		reapplyInterval:      durationFromEnv("REAPPLY_MS", 15000*time.Millisecond),

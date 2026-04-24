@@ -80,7 +80,7 @@ teams-luxafor-sync -once
 
 ## Optional env vars
 
-- `POLL_MS` (default `3000`)
+- `POLL_MS` (default `300`)
 - `TAIL_BYTES` (default `262144`)
 - `FALLBACK_LOG_SCAN_COUNT` (default `5`)
 - `REAPPLY_MS` (default `15000`)
