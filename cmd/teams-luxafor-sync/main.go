@@ -19,8 +19,10 @@ import (
 )
 
 const (
-	vendorID  = 1240
-	productID = 62322
+	vendorID               = 1240
+	productID              = 62322
+	noDeviceErrorThreshold = 5
+	noDeviceRetryInterval  = 60 * time.Second
 )
 
 var version = "dev"
@@ -45,6 +47,7 @@ var availabilityRe = regexp.MustCompile(`(?i)availability["']?\s*[:=]\s*["']?([A
 var hidInitOnce sync.Once
 var hidInitErr error
 var errEnumerationDone = errors.New("enumeration done")
+var errNoLuxaforDevice = errors.New("no Luxafor device found")
 
 type app struct {
 	pollInterval         time.Duration
@@ -58,6 +61,8 @@ type app struct {
 	lastLogFile          string
 	lastNoLogMessageAt   time.Time
 	lastApplyAt          time.Time
+	noDeviceErrorCount   int
+	noDeviceBackoffUntil time.Time
 }
 
 type logFile struct {
@@ -153,15 +158,48 @@ func (a *app) tick() {
 	color := mapToColor(availability)
 	needsReapply := time.Since(a.lastApplyAt) >= a.reapplyInterval
 	if availability != a.lastState || color != a.lastColor || needsReapply {
+		now := time.Now()
+		if !a.canAttemptLuxaforWrite(now) {
+			return
+		}
+
 		if err := setLuxaforColor(color); err != nil {
+			a.recordLuxaforWriteResult(err, now)
 			log.Printf("Luxafor error: %v", err)
 			return
 		}
+
+		a.recordLuxaforWriteResult(nil, now)
 		a.lastState = availability
 		a.lastColor = color
-		a.lastApplyAt = time.Now()
+		a.lastApplyAt = now
 		log.Printf("Teams=%s -> Luxafor=%s", availability, color)
 	}
+}
+
+func (a *app) canAttemptLuxaforWrite(now time.Time) bool {
+	return !a.noDeviceBackoffUntil.After(now)
+}
+
+func (a *app) recordLuxaforWriteResult(err error, now time.Time) {
+	if err == nil {
+		a.noDeviceErrorCount = 0
+		a.noDeviceBackoffUntil = time.Time{}
+		return
+	}
+
+	if !errors.Is(err, errNoLuxaforDevice) {
+		a.noDeviceErrorCount = 0
+		a.noDeviceBackoffUntil = time.Time{}
+		return
+	}
+
+	a.noDeviceErrorCount++
+	if a.noDeviceErrorCount < noDeviceErrorThreshold {
+		return
+	}
+
+	a.noDeviceBackoffUntil = now.Add(noDeviceRetryInterval)
 }
 
 func (a *app) resolveLogDir() string {
@@ -360,7 +398,7 @@ func setLuxaforColor(color string) error {
 	}
 
 	found := false
-	writeErr := errors.New("no Luxafor device found")
+	writeErr := errNoLuxaforDevice
 
 	err = hid.Enumerate(vendorID, productID, func(info *hid.DeviceInfo) error {
 		found = true
@@ -383,7 +421,7 @@ func setLuxaforColor(color string) error {
 		return err
 	}
 	if !found {
-		return errors.New("no Luxafor device found")
+		return errNoLuxaforDevice
 	}
 	return writeErr
 }

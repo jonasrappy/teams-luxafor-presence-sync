@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExtractAvailabilityFromBytes_LastMatchWins(t *testing.T) {
@@ -58,5 +60,66 @@ func TestExtractAvailabilityFromFile_TailOnly(t *testing.T) {
 	}
 	if got != "Available" {
 		t.Fatalf("expected Available from tail section, got %q", got)
+	}
+}
+
+func TestNoDeviceBackoffAfterFiveConsecutiveErrors(t *testing.T) {
+	a := &app{}
+	now := time.Unix(1700000000, 0)
+
+	for i := 0; i < noDeviceErrorThreshold-1; i++ {
+		a.recordLuxaforWriteResult(errNoLuxaforDevice, now)
+	}
+	if !a.noDeviceBackoffUntil.IsZero() {
+		t.Fatalf("expected no backoff before threshold, got %v", a.noDeviceBackoffUntil)
+	}
+
+	a.recordLuxaforWriteResult(errNoLuxaforDevice, now)
+	wantBackoffUntil := now.Add(noDeviceRetryInterval)
+	if !a.noDeviceBackoffUntil.Equal(wantBackoffUntil) {
+		t.Fatalf("expected backoff until %v, got %v", wantBackoffUntil, a.noDeviceBackoffUntil)
+	}
+	if a.canAttemptLuxaforWrite(now.Add(30 * time.Second)) {
+		t.Fatalf("expected write to be blocked during backoff window")
+	}
+	if !a.canAttemptLuxaforWrite(now.Add(61 * time.Second)) {
+		t.Fatalf("expected write to be allowed after backoff window")
+	}
+}
+
+func TestNoDeviceBackoffResetsOnSuccess(t *testing.T) {
+	a := &app{}
+	now := time.Unix(1700000000, 0)
+
+	for i := 0; i < noDeviceErrorThreshold; i++ {
+		a.recordLuxaforWriteResult(errNoLuxaforDevice, now)
+	}
+	if a.noDeviceBackoffUntil.IsZero() {
+		t.Fatalf("expected backoff to be active")
+	}
+
+	a.recordLuxaforWriteResult(nil, now.Add(2*time.Second))
+	if a.noDeviceErrorCount != 0 {
+		t.Fatalf("expected error count reset, got %d", a.noDeviceErrorCount)
+	}
+	if !a.noDeviceBackoffUntil.IsZero() {
+		t.Fatalf("expected backoff cleared, got %v", a.noDeviceBackoffUntil)
+	}
+}
+
+func TestNoDeviceCounterResetsOnOtherError(t *testing.T) {
+	a := &app{}
+	now := time.Unix(1700000000, 0)
+
+	for i := 0; i < noDeviceErrorThreshold-1; i++ {
+		a.recordLuxaforWriteResult(errNoLuxaforDevice, now)
+	}
+	a.recordLuxaforWriteResult(errors.New("write failed"), now)
+
+	if a.noDeviceErrorCount != 0 {
+		t.Fatalf("expected no-device error count reset, got %d", a.noDeviceErrorCount)
+	}
+	if !a.noDeviceBackoffUntil.IsZero() {
+		t.Fatalf("expected no backoff after other error, got %v", a.noDeviceBackoffUntil)
 	}
 }
