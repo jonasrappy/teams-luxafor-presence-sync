@@ -44,8 +44,7 @@ var awayStatuses = map[string]struct{}{
 }
 
 var availabilityRe = regexp.MustCompile(`(?i)availability["']?\s*[:=]\s*["']?([A-Za-z]+)`)
-var hidInitOnce sync.Once
-var hidInitErr error
+var luxaforHID = newHIDSession(realHIDAPI{})
 var errEnumerationDone = errors.New("enumeration done")
 var errNoLuxaforDevice = errors.New("no Luxafor device found")
 
@@ -389,28 +388,100 @@ func setLuxaforColor(color string) error {
 	}
 
 	report := []byte{1, 255, r, g, b, 0, 0, 0}
+	return luxaforHID.writeReport(vendorID, productID, report)
+}
 
-	hidInitOnce.Do(func() {
-		hidInitErr = hid.Init()
-	})
-	if hidInitErr != nil {
-		return hidInitErr
+type hidDevice interface {
+	Write([]byte) (int, error)
+	Close() error
+}
+
+type hidAPI interface {
+	Init() error
+	Exit() error
+	Enumerate(uint16, uint16, func(*hid.DeviceInfo) error) error
+	OpenPath(string) (hidDevice, error)
+}
+
+type realHIDAPI struct{}
+
+func (realHIDAPI) Init() error {
+	return hid.Init()
+}
+
+func (realHIDAPI) Exit() error {
+	return hid.Exit()
+}
+
+func (realHIDAPI) Enumerate(vid, pid uint16, enumFn func(*hid.DeviceInfo) error) error {
+	return hid.Enumerate(vid, pid, enumFn)
+}
+
+func (realHIDAPI) OpenPath(path string) (hidDevice, error) {
+	return hid.OpenPath(path)
+}
+
+type hidSession struct {
+	mu          sync.Mutex
+	api         hidAPI
+	initialized bool
+}
+
+func newHIDSession(api hidAPI) *hidSession {
+	return &hidSession{api: api}
+}
+
+func (s *hidSession) writeReport(vid, pid uint16, report []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.ensureInitializedLocked(); err != nil {
+		return fmt.Errorf("%w: cannot initialize HID: %v", errNoLuxaforDevice, err)
 	}
 
+	err := s.writeReportInitializedLocked(vid, pid, report)
+	if err != nil {
+		s.resetLocked()
+	}
+	return err
+}
+
+func (s *hidSession) ensureInitializedLocked() error {
+	if s.initialized {
+		return nil
+	}
+	if err := s.api.Init(); err != nil {
+		return err
+	}
+	s.initialized = true
+	return nil
+}
+
+func (s *hidSession) resetLocked() {
+	if !s.initialized {
+		return
+	}
+	if err := s.api.Exit(); err != nil {
+		log.Printf("Luxafor HID reset error: %v", err)
+	}
+	s.initialized = false
+}
+
+func (s *hidSession) writeReportInitializedLocked(vid, pid uint16, report []byte) error {
 	found := false
 	writeErr := errNoLuxaforDevice
 
-	err = hid.Enumerate(vendorID, productID, func(info *hid.DeviceInfo) error {
+	err := s.api.Enumerate(vid, pid, func(info *hid.DeviceInfo) error {
 		found = true
-		dev, openErr := hid.OpenPath(info.Path)
+		dev, openErr := s.api.OpenPath(info.Path)
 		if openErr != nil {
-			writeErr = fmt.Errorf("cannot open device with vendor id 0x4d8 and product id 0xf372: %v", openErr)
+			writeErr = fmt.Errorf("%w: cannot open device with vendor id 0x%04x and product id 0x%04x: %v", errNoLuxaforDevice, vid, pid, openErr)
 			return nil
 		}
 		defer dev.Close()
 
 		if _, openErr = dev.Write(report); openErr != nil {
-			writeErr = openErr
+			writeErr = fmt.Errorf("%w: cannot write report: %v", errNoLuxaforDevice, openErr)
 			return nil
 		}
 
@@ -418,7 +489,7 @@ func setLuxaforColor(color string) error {
 		return errEnumerationDone
 	})
 	if err != nil && !errors.Is(err, errEnumerationDone) {
-		return err
+		return fmt.Errorf("%w: cannot enumerate HID devices: %v", errNoLuxaforDevice, err)
 	}
 	if !found {
 		return errNoLuxaforDevice
@@ -433,7 +504,7 @@ func colorRGB(name string) (byte, byte, byte, error) {
 	case "green":
 		return 0, 255, 0, nil
 	case "yellow":
-		return 255, 255, 0, nil
+		return 255, 180, 0, nil
 	default:
 		return 0, 0, 0, fmt.Errorf("unsupported color: %s", name)
 	}
